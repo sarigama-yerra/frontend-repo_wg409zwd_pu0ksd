@@ -1,18 +1,53 @@
 import React, { useState } from "react";
+import { useAuth } from "./AuthContext";
 
 function ReportCreator() {
+  const { isAuthenticated, token } = useAuth();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Kebabs");
-  const [image, setImage] = useState("");
+  const [imageFile, setImageFile] = useState(null);
   const [excerpt, setExcerpt] = useState("");
   const [content, setContent] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3000);
-    // This is a UI-only draft creator. Hook this up to your backend when ready.
+    setError(null);
+    if (!isAuthenticated) {
+      setError("Only admins can create posts. Please log in.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const form = new FormData();
+      form.append("title", title);
+      form.append("category", category);
+      if (excerpt) form.append("excerpt", excerpt);
+      form.append("content", content);
+      if (imageFile) form.append("image", imageFile);
+
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || ""}/api/reports`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Failed to create report");
+      }
+      setSubmitted(true);
+      setTitle("");
+      setExcerpt("");
+      setContent("");
+      setImageFile(null);
+      setTimeout(() => setSubmitted(false), 4000);
+    } catch (err) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -20,12 +55,17 @@ function ReportCreator() {
       <div className="max-w-3xl mx-auto">
         <div className="mb-6">
           <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mb-2">Create Blog Report</h3>
-          <p className="text-slate-600">Draft a new post to share your latest find or food thoughts. Choose a category and add details.</p>
+          <p className="text-slate-600">Only admins can post. Upload an image, choose a category, and write your content.</p>
         </div>
 
         {submitted && (
           <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3">
-            Report draft created (not saved). Connect to backend to persist.
+            Report published successfully.
+          </div>
+        )}
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 text-red-800 px-4 py-3">
+            {error}
           </div>
         )}
 
@@ -56,13 +96,12 @@ function ReportCreator() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Cover Image URL</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Upload Image</label>
               <input
-                type="url"
-                value={image}
-                onChange={(e) => setImage(e.target.value)}
-                placeholder="https://..."
-                className="w-full rounded-lg border border-slate-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-white hover:file:bg-emerald-700"
               />
             </div>
           </div>
@@ -90,10 +129,10 @@ function ReportCreator() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button type="submit" className="inline-flex items-center px-5 py-2.5 rounded-full bg-emerald-600 text-white font-medium shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-              Create Report
+            <button type="submit" disabled={loading} className="inline-flex items-center px-5 py-2.5 rounded-full bg-emerald-600 text-white font-medium shadow-sm hover:bg-emerald-700 disabled:opacity-60">
+              {loading ? "Publishing..." : "Publish Report"}
             </button>
-            <span className="text-sm text-slate-500">This creates a draft locally.</span>
+            {!isAuthenticated && <span className="text-sm text-slate-500">Login as admin to publish.</span>}
           </div>
         </form>
       </div>
